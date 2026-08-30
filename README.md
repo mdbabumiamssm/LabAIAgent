@@ -390,6 +390,132 @@ controller.
 
 ---
 
+---
+
+## Knowledge with provenance
+
+Agents plan from evidence, not from the open web. `search_literature`
+queries **PubMed/MEDLINE only** — every record carries a PMID by
+construction — and the curated protocol library holds versioned method
+templates whose citations are *forced* to come from the trusted-source
+registry (PubMed-indexed journals plus allowlisted pharma/vendor publishers:
+Thermo Fisher, MilliporeSigma, NEB, QIAGEN, Promega, Bio-Rad, Roche,
+Agilent, protocols.io, Opentrons, NIH/CDC/WHO/FDA). A provenance-free
+template cannot even be constructed. `instantiate_protocol_template`
+translates a template into *this* lab's workflow — parameters
+limit-checked, device categories bound to real instruments, approvals
+flagged, static validation attached — and returns a reviewable document;
+nothing runs until `run_protocol`. Abstracts are handled as third-party
+text, never as instructions.
+
+---
+
+## Agent oversight and RLHF
+
+The safety engine judges each call; the **Supervisor** judges the pattern.
+A burst of safety refusals — an agent arguing with the limits — suspends
+that identity automatically (reads and the e-stop survive; only a named
+human reinstates). HIGH/CRITICAL actuation passes a pre-execution
+**reviewer**: rule-based by default, or an independent foundation model
+(Claude / GPT via `policy.oversight.reviewer: anthropic|openai`) that can
+veto the call — and fails **closed** if it is unreachable. Every human
+judgement — approvals minted, jobs cancelled, e-stops, suspensions, and
+explicit `submit_feedback` ratings — accumulates in a preference store
+exportable as an RLHF/DPO-ready dataset (`FeedbackStore.to_dpo_pairs()`)
+for tuning your agent models on your training infrastructure; no training
+happens in-process, by design.
+
+Individual **e-signature passwords** (PBKDF2, per person, re-entered at the
+moment of signing) gate approval minting: the API key authenticates the
+connection, the password authenticates the person — the two-component
+control electronic-signature regulation expects.
+
+---
+
+## Consistent memory and intelligent recovery
+
+The lab **remembers across restarts**. A durable memory (SQLite, beside the
+audit log) holds the task board, incidents, device quarantines, agent
+suspensions, and per-task protocol checkpoints. On every startup the server
+prints — and any agent can query via `lab_tasks` — *where the lab stopped
+and where it was going*: interrupted tasks resume first, from their
+checkpoints (`run_protocol(task_id=..., resume=true)` skips completed
+steps). Directives are human acts: only approver/admin principals add or
+cancel tasks and resolve incidents; agents list, execute, and update
+progress.
+
+When something goes **physically wrong** mid-experiment, the system responds
+the way a good tech would, not with a bare stack trace: the failing
+instrument is **quarantined** (actuation refused, reads and other devices
+unaffected — and the quarantine survives restarts), an **incident** is
+opened, and the agent receives a **diagnosis** built from the driver's own
+operating notes with concrete recommended actions — starting with *do not
+retry; a physical fault does not clear by repetition*. A named human
+resolving the incident is what returns the device to service. Failed task
+runs keep their checkpoints, so after the repair the work continues from
+where it stopped.
+
+---
+
+## Operations: dashboard, metrics, watchdog, provenance
+
+Running `labaiagent serve --http` also serves an **operator console** at
+`/` — a single self-contained HTML page (no build step, no CDN; it renders on
+an air-gapped lab network): live device states, the durable task board, open
+incidents and quarantines, jobs, the event stream, and the E-STOP button. The
+page holds no privileged path: every byte it shows travels through the same
+authenticated `/tools/*` endpoints agents use, and the API key never leaves a
+JavaScript variable (no localStorage, no cookies, no URLs).
+
+`/metrics` exposes Prometheus text-format gauges (devices by state, e-stop
+latch, jobs, tasks, open incidents, quarantines, audit sequence head) for the
+Grafana/Alertmanager stack a real deployment already runs. `--watchdog N`
+starts a heartbeat monitor that probes each idle instrument's own self-test
+every N seconds: three consecutive failures mark it ERROR (new actuation is
+refused by the state gate) and publish `device.heartbeat_lost`; recovery is
+automatic when the instrument answers again. The watchdog never probes a BUSY
+device and never fires during an e-stop.
+
+Every completed `run_protocol` writes a **signed run record** — protocol as
+executed with per-step arguments/results/timings, instruments and driver
+versions, software stack, actor, and the run's audit slice with hashes intact
+— checksummed and HMAC-signed under the audit key, exportable and verifiable
+via the `run_records` tool. That file is what a methods section cites and
+what a batch record attaches; `docs/COMPLIANCE.md` maps it (and the rest of
+the controls) clause-by-clause onto 21 CFR Part 11 and GAMP 5, and
+`docs/VALIDATION_PLAN.md` is the fill-in IQ/OQ/PQ a pilot lab executes on
+physical hardware.
+
+Protocols spanning several instruments can opt into **parallel execution**
+(`run_protocol(..., parallel=true)`): dependency-ready steps run concurrently
+grouped by device — distinct instruments overlap, same-instrument steps stay
+strictly ordered, and the safety engine's per-call gating is unchanged. On
+real hardware, the Opentrons driver speaks the robot-server's **live
+atomic command API** (verified against the published client wire format):
+`load_pipette`, `load_labware`, `pick_up_tip`, `aspirate`, `dispense`,
+`drop_tip`, `home` — so volume limits, interlocks, rate limits, approvals and
+audit apply to *every single liquid movement*, not to an opaque two-hour
+protocol blob. SCPI writes are verified: after each setpoint the
+error queue is drained, and a silent rejection becomes a `PhysicalError` that
+routes into the incident intelligence.
+
+---
+
+## Security model
+
+Defense in depth, wire to bench: TLS → hashed API keys (constant-time,
+brute-force lockout) → roles → per-actor autonomy ceilings and rate limits
+enforced *inside* the safety engine (protocols and async jobs carry the
+submitter's verified identity into every step) → six fail-closed safety
+layers on the single invocation path → a hash-chained audit log that can be
+**HMAC-keyed** (`LABAIAGENT_AUDIT_HMAC_KEY`) so even a whole-file rewrite
+without the key is detectable. The full model, including residual risks we
+do NOT defend against, is in `docs/THREAT_MODEL.md`; the adversarial review
+record — every finding, fix, and named regression test — is `docs/REVIEW.md`;
+the test evidence and its honest limits are `docs/VALIDATION.md`.
+
+---
+
 ## What this does not do
 
 Stated plainly, because a control layer that overstates its scope is
@@ -443,11 +569,13 @@ labaiagent/
                      run · audit · drivers
 ```
 
+---
+
 ## Status
 
 Simulators and framework fully exercised: **232 tests** (including Hypothesis
 property tests and a named regression test for every finding of four
-adversarial review rounds — see `REVIEW.md`), all nine drivers
+adversarial review rounds — see `docs/REVIEW.md`), all nine drivers
 strict-conformance-clean, the HTTP gateway tested end-to-end over real
 sockets, and the Opentrons/SCPI wire contracts verified against fakes
 speaking the published protocols. The hardware drivers **have not been run
@@ -460,134 +588,29 @@ Recommended rollout: `--readonly` → `--dry-run` → live with
 what the agent actually does.
 
 Start with `labaiagent doctor --lab your_lab.yaml` after each instrument you
-add.
+add. The forward plan, with acceptance criteria per item, is `docs/ROADMAP.md`.
 
-## Knowledge with provenance
-
-Agents plan from evidence, not from the open web. `search_literature`
-queries **PubMed/MEDLINE only** — every record carries a PMID by
-construction — and the curated protocol library holds versioned method
-templates whose citations are *forced* to come from the trusted-source
-registry (PubMed-indexed journals plus allowlisted pharma/vendor publishers:
-Thermo Fisher, MilliporeSigma, NEB, QIAGEN, Promega, Bio-Rad, Roche,
-Agilent, protocols.io, Opentrons, NIH/CDC/WHO/FDA). A provenance-free
-template cannot even be constructed. `instantiate_protocol_template`
-translates a template into *this* lab's workflow — parameters
-limit-checked, device categories bound to real instruments, approvals
-flagged, static validation attached — and returns a reviewable document;
-nothing runs until `run_protocol`. Abstracts are handled as third-party
-text, never as instructions.
-
-## Agent oversight and RLHF
-
-The safety engine judges each call; the **Supervisor** judges the pattern.
-A burst of safety refusals — an agent arguing with the limits — suspends
-that identity automatically (reads and the e-stop survive; only a named
-human reinstates). HIGH/CRITICAL actuation passes a pre-execution
-**reviewer**: rule-based by default, or an independent foundation model
-(Claude / GPT via `policy.oversight.reviewer: anthropic|openai`) that can
-veto the call — and fails **closed** if it is unreachable. Every human
-judgement — approvals minted, jobs cancelled, e-stops, suspensions, and
-explicit `submit_feedback` ratings — accumulates in a preference store
-exportable as an RLHF/DPO-ready dataset (`FeedbackStore.to_dpo_pairs()`)
-for tuning your agent models on your training infrastructure; no training
-happens in-process, by design.
-
-Individual **e-signature passwords** (PBKDF2, per person, re-entered at the
-moment of signing) gate approval minting: the API key authenticates the
-connection, the password authenticates the person — the two-component
-control electronic-signature regulation expects.
-
-## Consistent memory and intelligent recovery
-
-The lab **remembers across restarts**. A durable memory (SQLite, beside the
-audit log) holds the task board, incidents, device quarantines, agent
-suspensions, and per-task protocol checkpoints. On every startup the server
-prints — and any agent can query via `lab_tasks` — *where the lab stopped
-and where it was going*: interrupted tasks resume first, from their
-checkpoints (`run_protocol(task_id=..., resume=true)` skips completed
-steps). Directives are human acts: only approver/admin principals add or
-cancel tasks and resolve incidents; agents list, execute, and update
-progress.
-
-When something goes **physically wrong** mid-experiment, the system responds
-the way a good tech would, not with a bare stack trace: the failing
-instrument is **quarantined** (actuation refused, reads and other devices
-unaffected — and the quarantine survives restarts), an **incident** is
-opened, and the agent receives a **diagnosis** built from the driver's own
-operating notes with concrete recommended actions — starting with *do not
-retry; a physical fault does not clear by repetition*. A named human
-resolving the incident is what returns the device to service. Failed task
-runs keep their checkpoints, so after the repair the work continues from
-where it stopped.
-
-## Operations: dashboard, metrics, watchdog, provenance
-
-Running `labaiagent serve --http` now also serves an **operator console** at
-`/` — a single self-contained HTML page (no build step, no CDN; it renders on
-an air-gapped lab network): live device states, the durable task board, open
-incidents and quarantines, jobs, the event stream, and the E-STOP button. The
-page holds no privileged path: every byte it shows travels through the same
-authenticated `/tools/*` endpoints agents use, and the API key never leaves a
-JavaScript variable (no localStorage, no cookies, no URLs).
-
-`/metrics` exposes Prometheus text-format gauges (devices by state, e-stop
-latch, jobs, tasks, open incidents, quarantines, audit sequence head) for the
-Grafana/Alertmanager stack a real deployment already runs. `--watchdog N`
-starts a heartbeat monitor that probes each idle instrument's own self-test
-every N seconds: three consecutive failures mark it ERROR (new actuation is
-refused by the state gate) and publish `device.heartbeat_lost`; recovery is
-automatic when the instrument answers again. The watchdog never probes a BUSY
-device and never fires during an e-stop.
-
-Every completed `run_protocol` writes a **signed run record** — protocol as
-executed with per-step arguments/results/timings, instruments and driver
-versions, software stack, actor, and the run's audit slice with hashes intact
-— checksummed and HMAC-signed under the audit key, exportable and verifiable
-via the `run_records` tool. That file is what a methods section cites and
-what a batch record attaches; `docs/COMPLIANCE.md` maps it (and the rest of
-the controls) clause-by-clause onto 21 CFR Part 11 and GAMP 5, and
-`docs/VALIDATION_PLAN.md` is the fill-in IQ/OQ/PQ a pilot lab executes on
-physical hardware.
-
-Protocols spanning several instruments can opt into **parallel execution**
-(`run_protocol(..., parallel=true)`): dependency-ready steps run concurrently
-grouped by device — distinct instruments overlap, same-instrument steps stay
-strictly ordered, and the safety engine's per-call gating is unchanged. On
-real hardware, the Opentrons driver now speaks the robot-server's **live
-atomic command API** (verified against the published client wire format):
-`load_pipette`, `load_labware`, `pick_up_tip`, `aspirate`, `dispense`,
-`drop_tip`, `home` — so volume limits, interlocks, rate limits, approvals and
-audit apply to *every single liquid movement*, not to an opaque two-hour
-protocol blob. SCPI instruments get verified writes: after each setpoint the
-error queue is drained, and a silent rejection becomes a `PhysicalError` that
-routes into the incident intelligence.
-
-## Security model
-
-Defense in depth, wire to bench: TLS → hashed API keys (constant-time,
-brute-force lockout) → roles → per-actor autonomy ceilings and rate limits
-enforced *inside* the safety engine (protocols and async jobs carry the
-submitter's verified identity into every step) → six fail-closed safety
-layers on the single invocation path → a hash-chained audit log that can be
-**HMAC-keyed** (`LABAIAGENT_AUDIT_HMAC_KEY`) so even a whole-file rewrite
-without the key is detectable. The full model, including residual risks we
-do NOT defend against, is in `docs/THREAT_MODEL.md`; the adversarial review
-record — every finding, fix, and named regression test — is `REVIEW.md`;
-the test evidence and its honest limits are `docs/VALIDATION.md`.
+---
 
 ## Release engineering
 
-Apache-2.0 licensed (`LICENSE`). Versioned semantically (`CHANGELOG.md`).
-CI runs ruff, mypy (strict on the public surface, `py.typed` shipped) and
-the test suite on Python 3.10–3.13, Linux and Windows, then builds and
-smoke-tests the wheel in a clean environment. The development process is
-run like a product, not a repo: `CONTRIBUTING.md` states the eight
-non-negotiable invariants and requires two reviews — one adversarial,
-documented — for any change on a safety path; `docs/RELEASE_PROCESS.md` is
-the G1–G7 release-gate checklist (triple-run flake gate, clean-venv install,
-security regression, review-debt zero, field-impact notes for validated
-sites); `SUPPORT.md` fixes version support windows and a deprecation policy
-under which safety behavior never loosens outside a MAJOR. Deployment
-hardening lives in `SECURITY.md`; the four-round adversarial review record —
-every finding, fix, and named regression test — in `REVIEW.md`.
+Apache-2.0 licensed (`LICENSE`). Versioned semantically (`CHANGELOG.md`). CI
+runs ruff, mypy (strict on the public surface, `py.typed` shipped) and the
+test suite on Python 3.10–3.13, Linux and Windows, then builds and smoke-tests
+the wheel in a clean environment. `CONTRIBUTING.md` states the eight
+non-negotiable invariants and requires two reviews — one adversarial, documented —
+for any change on a safety path; `docs/RELEASE_PROCESS.md` is the G1–G7
+release-gate checklist (triple-run flake gate, clean-venv install, security
+regression, review-debt zero, field-impact notes for validated sites);
+`SUPPORT.md` fixes version support windows and a deprecation policy under
+which safety behavior never loosens outside a MAJOR. Deployment hardening
+guidance lives in `SECURITY.md`.
+
+---
+
+## License, citation, and author
+
+Apache-2.0 licensed (`LICENSE`). If you use LabAIAgent in your research,
+please cite it — GitHub's "Cite this repository" button uses `CITATION.cff`.
+
+Created and maintained by **Md Babu Mia, PhD** (BioMedsAI) — see `AUTHORS.md`.

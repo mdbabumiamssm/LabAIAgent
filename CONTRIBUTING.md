@@ -28,7 +28,7 @@ merits. They are the load-bearing walls:
    `@write` or a `@procedure`, whatever it is named.
 6. **Errors after physical actuation are never `TransientError`.** The retry
    layer re-executes transient failures; a re-executed aspirate is a double
-   aspirate (see REVIEW.md finding 4.2). Once hardware may have moved, raise
+   aspirate (see docs/REVIEW.md finding 4.2). Once hardware may have moved, raise
    `PhysicalError` (state unknown / fault) or `TransportError` (do not
    retry), never anything the session will retry.
 7. **Humans hold the irreversible verbs.** Approval minting, e-stop reset,
@@ -85,7 +85,7 @@ apply:
 ## Security findings
 
 Do not open a public issue for an exploitable defect. Follow `SECURITY.md`.
-A security fix PR gets a regression test and a REVIEW.md entry like any
+A security fix PR gets a regression test and a docs/REVIEW.md entry like any
 other finding — silence is not a control.
 
 ## Code style

@@ -10,7 +10,7 @@ Round-4 hardening release: an independent adversarial review of the v1.4.0
 operations layer (12 accepted findings, 2 critical), every fix carrying a
 named regression test, plus the corporate development-process package.
 
-### Fixed (safety-relevant — full detail in REVIEW.md, round 4)
+### Fixed (safety-relevant — full detail in docs/REVIEW.md, round 4)
 
 - **Parallel abort/cancel (critical, 4.1)**: parallel wave lanes now check a
   shared stop flag and `should_cancel` before EVERY step; a FAILED+ABORT
@@ -59,7 +59,7 @@ named regression test, plus the corporate development-process package.
   triple-run flake gate and field-impact notes for validated sites),
   `SUPPORT.md` (version support windows, deprecation policy — safety never
   loosens outside a MAJOR — severity/response targets).
-- REVIEW.md round-4 record: 12 findings, resolutions, regression tests.
+- docs/REVIEW.md round-4 record: 12 findings, resolutions, regression tests.
 
 ### Tests
 
@@ -207,7 +207,7 @@ The fixed tool surface grew once, 14 → 18, and remains fixed.
 ## [1.1.0] — 2026-08-29
 
 Security-layer release, after a second adversarial review round
-(`REVIEW.md` has the complete record; `docs/THREAT_MODEL.md` the model).
+(`docs/REVIEW.md` has the complete record; `docs/THREAT_MODEL.md` the model).
 
 ### Added — defense in depth
 
@@ -229,7 +229,7 @@ Security-layer release, after a second adversarial review round
   audit detection of any single-field mutation. Coverage measured and
   published in `docs/VALIDATION.md` (68 % overall; safety-critical core
   86–100 %).
-- `REVIEW.md` (adversarial review record), `docs/THREAT_MODEL.md`,
+- `docs/REVIEW.md` (adversarial review record), `docs/THREAT_MODEL.md`,
   `docs/VALIDATION.md`, `CITATION.cff`.
 
 ## [1.0.0] — 2026-08-29
