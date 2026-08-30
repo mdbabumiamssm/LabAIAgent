@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labaiagent"
+version = "1.4.1"
+description = "Universal AI-agent gateway for laboratory instruments: vendor-neutral control, fail-closed safety, and a tamper-evident audit trail"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "BioMedsAI"}]
+keywords = ["laboratory", "automation", "instruments", "mcp", "agents",
+            "ai-agents", "llm", "self-driving-lab", "sila", "opentrons"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Typing :: Typed",
+]
+
+# Core stays stdlib + PyYAML on purpose: this has to install on locked-down
+# instrument workstations with no build toolchain.
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+serial     = ["pyserial>=3.5"]
+sila       = ["sila2>=0.10"]
+mcp        = ["mcp>=1.2"]
+win        = ["pywin32>=306; sys_platform == 'win32'"]
+langchain  = ["langchain-core>=0.3", "pydantic>=2"]
+llamaindex = ["llama-index-core>=0.11"]
+crewai     = ["crewai>=0.70", "pydantic>=2"]
+autogen    = ["autogen-agentchat>=0.2"]
+smolagents = ["smolagents>=1.0"]
+oversight  = ["anthropic>=0.40", "openai>=1.40"]
+dev        = ["pytest>=7.4", "pytest-cov>=4.1", "hypothesis>=6.100"]
+all        = ["pyserial>=3.5", "sila2>=0.10", "mcp>=1.2", "pytest>=7.4"]
+
+[project.scripts]
+labaiagent = "labaiagent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["labaiagent*"]
+
+[tool.setuptools.package-data]
+labaiagent = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["hardware: requires physical instruments (deselect with -m 'not hardware')"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+  "E501",   # long lines in docstrings/messages are deliberate
+  "B008",   # Param(...) defaults in decorators are the declarative API
+  "B023",   # closure-over-loop-var is used intentionally with bind tricks
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]     # curated re-export surfaces
+"examples/*"     = ["E402"]     # sys.path bootstrap before imports
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_ignores = false
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*", "serial", "sila2.*", "mcp.*", "win32com.*",
+          "anthropic", "openai",
+          "pythoncom", "pydantic", "langchain_core.*", "llama_index.*",
+          "crewai.*", "smolagents"]
+ignore_missing_imports = true

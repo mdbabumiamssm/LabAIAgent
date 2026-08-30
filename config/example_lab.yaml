@@ -1,0 +1,134 @@
+# LabAIAgent lab configuration
+#
+# This file IS the integration surface. Adding instrument N+1 is a stanza here
+# plus, if it is a new model, one driver module. Nothing else in the system
+# changes -- not the MCP tool schema, not the safety engine, not the protocols
+# you have already written.
+#
+#   labaiagent doctor --lab config/example_lab.yaml
+#   labaiagent describe --lab config/example_lab.yaml
+#   labaiagent serve --lab config/example_lab.yaml
+
+name: sinai-mpn-bench
+
+policy:
+  # Highest risk tier an agent may invoke unattended. Anything above this
+  # needs a scoped, expiring, single-use human approval token.
+  #   none | low | medium | high | critical
+  autonomy_ceiling: medium
+
+  # Sliding-window caps. The characteristic agent failure is not one bad
+  # command, it is the same marginal command a thousand times in a loop.
+  rate_limits:
+    "*":
+      max_calls: 600
+      window_s: 60
+    "arm.*":
+      max_calls: 40
+      window_s: 60
+    "spinner.proc:spin":
+      max_calls: 4
+      window_s: 3600
+
+  # AI-agent oversight (labaiagent.oversight). reviewer: rules (default,
+  # deterministic, offline) | anthropic | openai (an independent foundation
+  # model vetoes HIGH/CRITICAL calls; fails CLOSED if unreachable).
+  oversight:
+    reviewer: rules
+    max_refusals: 5        # safety refusals per window before suspension
+    window_s: 120
+
+devices:
+
+  # ---------------------------------------------------------------- simulated
+  # Keep a simulated twin of every real instrument. Protocols get debugged
+  # against the twin, and `--dry-run` against the real lab then only has to
+  # catch environment differences rather than logic errors.
+
+  - id: lh
+    driver: sim.liquid_handler
+    location: bench-A
+    simulated: true
+    tags: [pipetting, core]
+
+  - id: reader
+    driver: sim.plate_reader
+    location: bench-A
+    simulated: true
+    tags: [detection, core]
+
+  - id: cycler
+    driver: sim.thermocycler
+    location: bench-A
+    simulated: true
+    tags: [amplification]
+
+  - id: arm
+    driver: sim.robot_arm
+    location: bench-A
+    simulated: true
+    tags: [transport]
+    config:
+      # Narrow the driver's 5-100% speed range for this cell. Config may only
+      # ever tighten a limit, never widen one -- a config that could widen a
+      # safety bound is exactly how a limit quietly disappears.
+      limits:
+        "write:speed":
+          value: {low: 5.0, high: 60.0, unit: percent}
+
+  - id: incubator
+    driver: sim.incubator
+    location: bench-A
+    simulated: true
+
+  - id: spinner
+    driver: sim.centrifuge
+    location: bench-A
+    simulated: true
+
+  # ------------------------------------------------------------------- real
+  # Uncomment and edit as each instrument is brought online. Run
+  # `labaiagent doctor` after each one: it connects, runs the conformance suite,
+  # and reports what is still wrong. One instrument at a time.
+
+  # - id: flex
+  #   driver: opentrons.flex
+  #   location: bench-B
+  #   tags: [pipetting]
+  #   config:
+  #     host: 192.168.1.42
+  #     port: 31950
+  #     api_version: "4"
+
+  # A generic SCPI instrument needs no new Python at all -- the command map
+  # and the safe range both live here.
+  # - id: chiller
+  #   driver: generic.scpi
+  #   location: bench-B
+  #   config:
+  #     scheme: serial
+  #     port: /dev/ttyUSB0
+  #     baudrate: 19200
+  #     terminator: "\r\n"
+  #     commands:
+  #       value: "MEAS:TEMP?"
+  #       set_value: "SOUR:TEMP {value:.2f}"
+  #       halt: "ABOR"
+  #     limits:
+  #       "write:value":
+  #         value: {low: 4.0, high: 80.0, unit: degC}
+  #     risk:
+  #       "write:raw": critical
+
+  # The plate reader with no API. Still automatable: the vendor software
+  # exports a CSV, this driver ingests it, and downstream code cannot tell
+  # the difference from a REST instrument.
+  # - id: oldreader
+  #   driver: generic.filewatch_reader
+  #   location: bench-C
+  #   config:
+  #     watch_dir: /mnt/instruments/reader_exports
+  #     archive_dir: /data/raw/reader
+  #     pattern: "*.csv"
+  #     delimiter: ","
+  #     timeout: 900

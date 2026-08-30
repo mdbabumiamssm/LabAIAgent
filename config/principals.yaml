@@ -1,0 +1,50 @@
+# LabAIAgent principals -- verified identities for the gateway.
+#
+# The audit trail is only as trustworthy as the actor field, so networked
+# callers must authenticate. Each principal gets a role, and optionally an
+# autonomy ceiling BELOW the session's (identity can only restrict, never
+# widen) and its own rate limits.
+#
+#   roles:  observer  read-only tools
+#           operator  actuation up to the effective ceiling
+#           approver  + may mint approval tokens (this is the HUMAN role
+#                       that unlocks remote approvals from a phone/dashboard)
+#           admin     + policy changes
+#
+# Keys can be stored hashed:  api_key_sha256: "<sha256 hex of the key>"
+#   python3 -c "import hashlib;print(hashlib.sha256(b'YOURKEY').hexdigest())"
+
+principals:
+
+  - id: agent:claude
+    kind: agent
+    role: operator
+    api_key: "lak_change_me_claude"
+    autonomy_ceiling: medium
+
+  - id: agent:openai
+    kind: agent
+    role: operator
+    api_key: "lak_change_me_openai"
+    autonomy_ceiling: low            # newer integration: start tighter
+    rate_limits:
+      "*": {max_calls: 120, window_s: 60}
+
+  - id: agent:watcher
+    kind: agent
+    role: observer                   # can see everything, actuate nothing
+    api_key: "lak_change_me_watcher"
+
+  - id: user:babu
+    kind: human
+    role: admin
+    api_key: "lak_change_me_admin"
+    # E-signature password (PBKDF2). Generate with: labaiagent hash-password
+    # When set, minting an approval token requires this password re-entered
+    # per signature -- the identity half of an electronic signature.
+    password: "change-me-signing-password"
+
+# Unauthenticated callers are rejected. Flip this only for a loopback-only
+# bench setup, and they become read-only observers, never operators.
+allow_anonymous: false
+anonymous_role: observer

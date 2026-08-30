@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use LabAIAgent in your research, please cite it as below."
+title: "LabAIAgent: a universal, safety-gated AI-agent gateway for laboratory instruments"
+type: software
+authors:
+  - name: "BioMedsAI"
+version: 1.4.1
+date-released: "2026-08-29"
+license: Apache-2.0
+keywords:
+  - laboratory automation
+  - AI agents
+  - large language models
+  - self-driving laboratory
+  - instrument control
+  - audit trail
+abstract: >-
+  LabAIAgent is a vendor-neutral control, safety, and audit layer that makes
+  laboratory instruments discoverable and safely operable by any AI agent
+  runtime (MCP, OpenAI/Gemini tool calling, LangChain, LlamaIndex, CrewAI,
+  AutoGen, smolagents, REST/OpenAPI) through one fixed fourteen-tool
+  interface. Every actuation passes a fail-closed six-layer safety engine
+  under a verified per-agent identity and is recorded in a hash-chained,
+  optionally HMAC-keyed, tamper-evident audit log.
