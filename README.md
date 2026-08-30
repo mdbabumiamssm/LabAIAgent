@@ -1,4 +1,6 @@
 # LabAIAgent
+MD BABU MIA, PhD
+mdbabamia777@gmail.com , mdbabumia@biomedsai.com
 
 **The universal AI-agent gateway for laboratory instruments.**
 
